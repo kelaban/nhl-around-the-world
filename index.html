@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  background: #222
+}
+
+.land {
+  fill: #fff;
+}
+
+.country-border {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.25px;
+}
+
+.hidden {
+  display: none
+}
+
+.overlay {
+  fill: none;
+  pointer-events: all;
+}
+
+.q0-9 { fill:rgb(247,251,255); }
+.q1-9 { fill:rgb(222,235,247); }
+.q2-9 { fill:rgb(198,219,239); }
+.q3-9 { fill:rgb(158,202,225); }
+.q4-9 { fill:rgb(107,174,214); }
+.q5-9 { fill:rgb(66,146,198); }
+.q6-9 { fill:rgb(33,113,181); }
+.q7-9 { fill:rgb(8,81,156); }
+.q8-9 { fill:rgb(8,48,107); }
+.q19-9 { fill:rgb(8,48,107); }
+
+</style>
+<body>
+<script src="lib/d3.v3.min.js"></script>
+<script src="lib/queue.v1.min.js"></script>
+<script src="lib/topojson.v1.min.js"></script>
+<script src="lib/lodash.min.js"></script>
+<script>
+'use strict'
+
+var width = 960,
+    height = 960;
+
+var rateById;
+var totalPlayers = 0;
+
+
+var quantize = d3.scale.quantize()
+    .domain([1, 150])
+    //.range(d3.scale.category20().range());
+    .range(d3.range(5,9).map(function(i) { return "q" + i + "-9"; }));
+
+var projection = d3.geo.mercator()
+   .scale((width + 1) / 2 / Math.PI)
+    .translate([width / 2, height / 2])
+    .precision(.1);
+
+var zoom = d3.behavior.zoom()
+    .translate([0, 0])
+    .scale(1)
+    .scaleExtent([1, 8])
+    .on("zoom", zoomed);
+
+var path = d3.geo.path()
+    .projection(projection);
+
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height)
+
+
+var features = svg.append("g");
+
+svg.call(zoom).call(zoom.event);
+
+
+queue()
+    .defer(d3.json, "data/world.json")
+    .defer(d3.json, "data/playerProfilesWithGeo.json")
+    .await(ready);
+
+function ready(error, world, playerData) {
+  var playerLocations = makePlayerMap(playerData);
+
+  var countryFeatures = topojson.feature(world, world.objects.countries).features;
+  //var stateFeatures = topojson.feature(world, world.objects.states).features;
+
+   features.append("g")
+        .attr("class", "land")
+      .selectAll("path")
+        .data(countryFeatures)
+      .enter().append("path")
+        .attr("class", function(d) {
+          var count = (playerLocations.get(d.id) || {}).count;
+          return quantize(count);
+        })
+        .attr("d", path);
+
+  features.append("path")
+      .datum(topojson.mesh(world, world.objects.countries, function(a, b) { return a !== b; }))
+      .attr("class", "country-border")
+      .attr("d", path);
+
+
+/*
+  features.append("g")
+      .attr("class", "states")
+    .selectAll("path")
+      .data(stateFeatures)
+    .enter().append("path")
+      .attr("class", function(d) {
+        var count = (playerLocations.get(d.properties.name) || {}).count;
+        return quantize(count);
+      })
+      .attr("d", path);
+      */
+
+}
+
+
+function makePlayerMap(players) {
+  var locations = d3.map();
+
+  _.each(players, function (p) {
+    if( p.geo.status !== 'OK' ) return;
+
+    var country = _.find(p.geo.results[0].address_components, function(g) {
+        return _.contains(g.types, 'country');
+    });
+
+
+    var state = _.find(p.geo.results[0].address_components, function(g) {
+        return _.contains(g.types, 'administrative_area_level_1');
+    });
+
+    if(country) {
+      var key;
+
+      var countryName = country.short_name;
+      if( countryName !== 'US' && countryName !== 'CA' ) {
+        key = countryName;
+      } else {
+        //key = state.long_name;
+        key = countryName;
+      }
+
+      var loc = locations.get(key) || {};
+      var count = loc.count || 0;
+      locations.set(key, {
+        name: key,
+        count: count+=1
+      });
+    }
+
+  });
+
+  return locations;
+}
+
+function zoomed() {
+  features.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+  features.select(".country-border").style("stroke-width", 1.25 / d3.event.scale + "px");
+}
+
+
+d3.select(self.frameElement).style("height", height + "px");
+
+</script>
