@@ -76,116 +76,232 @@ div.tooltip {
 <script>
 'use strict'
 
-var width = 960,
-    height = 960,
-    active = d3.select(null);
+var APP = function () {
+  var app = this;
+  app.width = 960;
+  app.height = 960;
+  app.playerSize = 4;
+  app.active = d3.select(null);
 
-var playerLocations;
-var totalPlayers = 0;
+  app.f = {
+    init: function (error, world, playerData) {
+      app.playerLocations = makePlayerMap(playerData);
+
+      var svg = app.svg = d3.select("body").append("svg")
+          .attr("width", app.width)
+          .attr("height", app.height)
+          .on("click", app.f.behaviors.stopped, true);
+
+      app.tooltipDiv = d3.select("body").append("div")
+          .attr("class", "tooltip")
+          .style("opacity", 0);
+
+      var features_g = app.features_g = svg.append("g");
+      app.land_g = features_g.append("g").attr("class", "land");
+      app.states_g = features_g.append("g").attr("class", "states");
+      app.players_g = features_g.append("g").attr("class", "players");
+
+      app.f.drawMap(world);
+      app.f.drawPlayers();
+
+      svg.call(app.zoom).call(app.zoom.event);
+    },
 
 
-var logscale = d3.scale.log()
-    .domain([1, 400])
-    .range([0,1]);
+    drawMap: function(world) {
+      var countryFeatures = topojson.feature(world, world.objects.countries).features;
+      var stateFeatures = topojson.feature(world, world.objects.states).features;
 
-var linearscale = d3.scale.quantize()
-    .domain([0, 1])
-    .range(d3.range(9).map(function(i) { return "q" + i + "-9"; }));
 
-var quantize = function(d) {
-  return linearscale( logscale ( d ) );
+      app.projection =  d3.geo.mercator()
+                          .scale((app.width + 1) / 2 / Math.PI)
+                          .translate([app.width / 2, app.height / 2])
+                          .precision(.1);
+
+
+      app.zoom =  d3.behavior.zoom()
+                    .translate([0, 0])
+                    .scale(1)
+                    .scaleExtent([1, 500])
+                    .on("zoom", app.f.behaviors.zoom);
+
+      var path = d3.geo.path()
+          .projection(app.projection);
+
+      var land = app.land_g;
+      var states = app.states_g;
+
+      land.selectAll("path")
+          .data(countryFeatures)
+          .enter().append("path")
+          .attr("d", path);
+
+      land.append("path")
+          .datum(topojson.mesh(world, world.objects.countries))
+          .attr("class", "mesh")
+          .attr("d", path);
+
+
+    //TODO fix the states, show all of US and canada?
+    states.selectAll("path")
+          .data(stateFeatures)
+          .enter().append("path")
+          .attr("class", function(d) {
+            return "hidden " + d.id;
+          })
+          .attr("d", path);
+
+    states.append("path")
+          .datum(topojson.mesh(world, world.objects.states))
+          .attr("class", "mesh")
+          .attr("d", path);
+
+    },
+
+
+    drawPlayers: function () {
+      //TODO make this data static before runtime
+      var players = _.chain(app.playerLocations.values()).pluck('players').flatten().value();
+      var projection = app.projection;
+
+      app.players_g
+        .selectAll("circle")
+        .data(players)
+        .enter().append("circle")
+        .attr("cx", function (d) {
+          var loc = d.location;
+          return projection([loc.lng, loc.lat])[0];
+        })
+        .attr("cy", function (d) {
+          return -20;
+        })
+        .attr("class", "player")
+        .attr("r", app.playerSize / app.zoom.scale())
+        .on("mouseover", function(d) {
+          /*
+          tooltipDiv.transition()
+              .duration(200)
+              .style("opacity", .9);
+          tooltipDiv.html(tooltipFor(d))
+              .style("left", (d3.event.pageX) + 30 + "px")
+              .style("top", (d3.event.pageY - 28) + "px");
+              */
+        })
+        .on("mouseout", function(d) {
+          /*
+          tooltipDiv.transition()
+              .duration(500)
+              .style("opacity", 0);
+              */
+        })
+        .on("click", app.f.behaviors.playerClicked)
+        .transition().duration(2000)
+        .delay(function(d, i) { return (i * 10) + 750; })
+        //.delay(750)
+        /*
+        .delay(function () {
+          return app.f.randomIntFromInterval(500, 1500);
+        })
+        */
+        .attr("cx", function (d) {
+          var loc = d.location;
+          return projection([loc.lng, loc.lat])[0];
+        })
+        .attr("cy", function (d) {
+          var loc = d.location;
+          return projection([loc.lgn, loc.lat])[1];
+        })
+    },
+
+
+    showPlayersFor: function (country) {
+      app.players_g.selectAll("circle")
+               .filter(function(d) {
+                  return d.country === country;
+               })
+               .classed("active", true);
+    },
+
+
+
+    randomIntFromInterval: function (min,max) {
+        return Math.floor(Math.random()*(max-min+1)+min);
+    },
+
+
+    behaviors: {
+
+      zoom: function () {
+        var players_g = app.players_g,
+            features_g = app.features_g;
+        players_g.selectAll('circle').attr("r", app.playerSize / d3.event.scale);
+        features_g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+        features_g.selectAll(".mesh").style("stroke-width", 1 / d3.event.scale + "px");
+        features_g.select(".states").style("stroke-width", 1 / d3.event.scale + "px");
+      },
+
+
+
+      playerClicked: function (d) {
+        var active = app.active;
+        if (active.node() === this) return app.f.behaviors.reset();
+
+        app.players_g.selectAll("circle").classed("active selected", false);
+
+        active.classed("active", false);
+
+        app.active = d3.select(this).classed("active selected", true);
+
+        var loc = d.location,
+            proj = app.projection([loc.lng, loc.lat]),
+            x = proj[0],
+            y = proj[1],
+            scale = Math.max(app.zoom.scale(), 7),
+            translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
+
+        app.svg.transition()
+                .duration(750)
+                .call(app.zoom.translate(translate).scale(scale).event);
+
+        app.f.showPlayersFor(d.country);
+      },
+
+
+
+      reset: function () {
+        app.players_g.selectAll("circle").classed("active selected", false);
+        app.active.classed("active selected", false);
+
+
+        app.active = d3.select(null);
+
+        app.svg.transition()
+            .duration(750)
+            .call(app.zoom.translate([0, 0]).scale(1).event);
+      },
+
+      // If the drag behavior prevents the default click,
+      // also stop propagation so we don’t click-to-zoom.
+      stopped: function () {
+        if (d3.event.defaultPrevented) d3.event.stopPropagation();
+      }
+
+    }
+
+  }
+
+
 }
 
-var projection = d3.geo.mercator()
-   .scale((width + 1) / 2 / Math.PI)
-    .translate([width / 2, height / 2])
-    .precision(.1);
-
-var zoom = d3.behavior.zoom()
-    .translate([0, 0])
-    .scale(1)
-    .scaleExtent([1, 500])
-    .on("zoom", zoomed);
-
-var path = d3.geo.path()
-    .projection(projection);
-
-
-var svg = d3.select("body").append("svg")
-    .attr("width", width)
-    .attr("height", height)
-    .on("click", stopped, true);
-
-var tooltipDiv = d3.select("body").append("div")
-    .attr("class", "tooltip")
-    .style("opacity", 0);
-
-var features_g = svg.append("g");
-var players_g;
-
-svg.call(zoom).call(zoom.event);
-
-
+var app;
 queue()
     .defer(d3.json, "data/world.json")
     .defer(d3.json, "data/playerProfilesWithGeo.json")
-    .await(ready);
-
-function ready(error, world, playerData) {
-  playerLocations = makePlayerMap(playerData);
-
-  var countryFeatures = topojson.feature(world, world.objects.countries).features;
-  var stateFeatures = topojson.feature(world, world.objects.states).features;
-
-   features_g.append("g")
-        .attr("class", "land")
-      .selectAll("path")
-        .data(countryFeatures)
-      .enter().append("path")
-      /*
-        .attr("class", function(d) {
-          var count = (playerLocations.get(d.id) || {}).count;
-          return quantize(count);
-        })
-        */
-        .attr("d", path);
-
-  function importantMesh(a, b) {
-    return (playerLocations.has(a.id) || playerLocations.has(b.id));
-  }
-
-  features_g.append("path")
-      .datum(topojson.mesh(world, world.objects.countries, function(a, b) { return importantMesh(a,b) }))
-      .attr("class", "mesh important")
-      .attr("d", path);
-
-  features_g.append("path")
-      .datum(topojson.mesh(world, world.objects.countries, function(a, b) { return !importantMesh(a,b); }))
-      .attr("class", "mesh")
-      .attr("d", path);
-
-
-//TODO fix the states, show all of US and canada?
-  features_g.append("g")
-      .attr("class", "states")
-    .selectAll("path")
-      .data(stateFeatures)
-    .enter().append("path")
-      .attr("class", function(d) {
-        return "hidden " + d.id;
-      })
-      .attr("d", path);
-
-  features_g.append("path")
-      .datum(topojson.mesh(world, world.objects.states))
-      .attr("class", "mesh")
-      .attr("d", path);
-
-  //ensure players get drawn on top
-  players_g = features_g.append("g").attr("class", "players");
-  showAllPlayers();
-}
-
+    .await( function ready(error, world, players) {
+      app = new APP();
+      app.f.init(error, world, players);
+      d3.select(self.frameElement).style("height", app.height + "px")
+    })
 
 function makePlayerMap(players) {
   var locations = d3.map();
@@ -242,108 +358,8 @@ function makePlayerMap(players) {
 }
 
 
-function zoomed() {
-  if(players_g) {
-    players_g.selectAll('circle').attr("r", 4 / d3.event.scale);
-  }
-
-  features_g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
-  features_g.selectAll(".mesh").style("stroke-width", 1 / d3.event.scale + "px");
-  features_g.select(".states").style("stroke-width", 1 / d3.event.scale + "px");
-}
 
 
-function clicked(d) {
-  if (active.node() === this) return reset();
-
-  players_g.selectAll("circle").classed("active selected", false);
-
-  active.classed("active", false);
-
-  active = d3.select(this).classed("active selected", true);
-
-  var loc = d.location,
-      proj = projection([loc.lng, loc.lat]),
-      x = proj[0],
-      y = proj[1],
-      pScale = zoom.scale(),
-      scale = pScale > 7 ? pScale : 7,
-      translate = [width / 2 - scale * x, height / 2 - scale * y];
-
-  svg.transition()
-      .duration(750)
-      .call(zoom.translate(translate).scale(scale).event);
-
-  showPlayersFor(d.country);
-}
-
-function showAllPlayers() {
-  showPlayers(_.chain(playerLocations.values()).pluck('players').flatten().value())
-}
-
-function showPlayersFor(country) {
-  players_g.selectAll("circle")
-           .filter(function(d) {
-              return d.country === country;
-           })
-           .classed("active", true);
-}
-
-function showPlayers(players) {
-  players_g
-    .selectAll("circle")
-    .data(players)
-    .enter().append("circle")
-    .attr("cx", function (d) {
-      var loc = d.location;
-      return projection([loc.lng, loc.lat])[0];
-    })
-    .attr("cy", function (d) {
-      var loc = d.location;
-      return projection([loc.lgn, loc.lat])[1];
-    })
-    .attr("class", "player")
-    .attr("r", 0)
-    .on("mouseover", function(d) {
-      tooltipDiv.transition()
-          .duration(200)
-          .style("opacity", .9);
-      tooltipDiv.html(tooltipFor(d))
-          .style("left", (d3.event.pageX) + 30 + "px")
-          .style("top", (d3.event.pageY - 28) + "px");
-    })
-    .on("mouseout", function(d) {
-      tooltipDiv.transition()
-          .duration(500)
-          .style("opacity", 0);
-    })
-    .on("click", clicked)
-    .transition().duration(1000).delay(500)
-    .attr("r", 4 / zoom.scale())
-}
-
-function tooltipFor(d) {
-  return [d.name, d.birthday, d.town, d.position, d.team].join('<br/>');
-
-}
-function reset () {
-  players_g.selectAll("circle").classed("active selected", false);
-  active.classed("active selected", false);
-  d3.selectAll("."+active.datum().id).classed("hidden", true);
 
 
-  active = d3.select(null);
-
-  svg.transition()
-      .duration(750)
-      .call(zoom.translate([0, 0]).scale(1).event);
-}
-
-// If the drag behavior prevents the default click,
-// also stop propagation so we don’t click-to-zoom.
-function stopped() {
-  if (d3.event.defaultPrevented) d3.event.stopPropagation();
-}
-
-
-d3.select(self.frameElement).style("height", height + "px")</script>
+</script>
