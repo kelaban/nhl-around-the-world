@@ -2,8 +2,46 @@
 <meta charset="utf-8">
 <style>
 
+html, body{
+  height: 100%;
+  font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  font-weight: 300;
+}
+
 body {
-  background: #000
+  background: #000;
+  min-width: 1200px;
+}
+
+#container {
+  height: 960px;
+}
+
+
+#searchArea {
+  height: 100%;
+  width: 210px;
+  float: left;
+  background: transparant;
+}
+
+#searchResults {
+  height: 100%;
+  overflow: scroll;
+  padding-top: 10px;
+}
+
+.map {
+  float: left;
+  width: 960px;
+}
+
+#resetZoom {
+  color: white;
+  cursor: pointer;
+  z-index: 999;
+  float: right;
+  font-size: 24px;
 }
 
 .land {
@@ -24,11 +62,6 @@ body {
   fill: none;
 }
 
-.overlay {
-  fill: none;
-  pointer-events: all;
-}
-
 .player {
   fill: rgb(166,189,219);
   cursor: pointer;
@@ -44,35 +77,88 @@ body {
 }
 
 
-.q0-9{fill:rgb(255,247,236)}
-.q1-9{fill:rgb(254,232,200)}
-.q2-9{fill:rgb(253,212,158)}
-.q3-9{fill:rgb(253,187,132)}
-.q4-9{fill:rgb(252,141,89)}
-.q5-9{fill:rgb(239,101,72)}
-.q6-9{fill:rgb(215,48,31)}
-.q7-9{fill:rgb(179,0,0)}
-.q8-9{fill:rgb(127,0,0)}
+.sr {
+  cursor: pointer;
+  color: white;
+  padding-bottom: 5px;
+}
 
-div.tooltip {
+
+div.hud {
   position: absolute;
-  text-align: center;
-  width: 200px;
-  height: 80px;
-  padding: 2px;
-  font: 12px sans-serif;
-  background: lightsteelblue;
+  line-height: 10px;
+  text-align: left;
+  width: 500px;
+  height: 105px;
+  padding: 12px;
+  background-color: rgba(255,255,255,0.85);
   border: 0px;
   border-radius: 8px;
   pointer-events: none;
 }
 
+.hud .title {
+  font-weight: bold;
+  font-size: 24px;
+}
+
+.hud .head {
+  float: left;
+  height: 105px;
+  width: 70px;
+}
+
+.hud .head img {
+  height: 100%;
+  width: 100%;
+}
+
+.hud .main {
+  float: left;
+  padding-left: 12px;
+  padding-top: 5px;
+}
+
+
+
+
+
 </style>
+
 <body>
+
+<div class="hud hidden" id="playerHud">
+  <div class="head">
+    <img id="hudHeadshot" src=""/>
+  </div>
+  <div class="main">
+    <span id="hudName" class="title"></span>
+    <span id="hudNumber"></span>
+    <p id="hudTeam" class=""></p>
+    <p id="hudTown" class=""></p>
+    <p id="hudPosition" class""></p>
+  </div>
+</div>
+
+<div id="container">
+  <div id="searchArea">
+    <div id="searchInput" class="hidden">
+      <input id="playerSearch">
+    </div>
+    <div id="searchResults">
+    </div>
+  </div>
+
+  <div class="map">
+    <div id="resetZoom" class="hidden" > Reset Zoom </div>
+    <svg id="visualization"> </svg>
+  </div>
+</div>
 <script src="lib/d3.v3.min.js"></script>
 <script src="lib/queue.v1.min.js"></script>
 <script src="lib/topojson.v1.min.js"></script>
 <script src="lib/lodash.min.js"></script>
+<script src="lib/jquery-1.11.1.min.js"></script>
 <script>
 'use strict'
 
@@ -82,19 +168,17 @@ var APP = function () {
   app.height = 960;
   app.playerSize = 4;
   app.active = d3.select(null);
+  app.playerHudPinned = false;
 
   app.f = {
     init: function (error, world, playerData) {
-      app.playerLocations = makePlayerMap(playerData);
 
-      var svg = app.svg = d3.select("body").append("svg")
+      var svg = app.svg = d3.select("#visualization")
           .attr("width", app.width)
           .attr("height", app.height)
           .on("click", app.f.behaviors.stopped, true);
 
-      app.tooltipDiv = d3.select("body").append("div")
-          .attr("class", "tooltip")
-          .style("opacity", 0);
+      app.playerHud = $("#playerHud")
 
       var features_g = app.features_g = svg.append("g");
       app.land_g = features_g.append("g").attr("class", "land");
@@ -102,15 +186,22 @@ var APP = function () {
       app.players_g = features_g.append("g").attr("class", "players");
 
       app.f.drawMap(world);
-      app.f.drawPlayers();
 
+
+      app.playerLocations = makePlayerMap(playerData);
+      app.f.drawPlayers();
+      $("#playerSearch").trigger("input");
+      $("#searchInput").removeClass("hidden");
+      $("#resetZoom").removeClass("hidden");
+
+      //initialize zoom handling
       svg.call(app.zoom).call(app.zoom.event);
     },
 
 
     drawMap: function(world) {
       var countryFeatures = topojson.feature(world, world.objects.countries).features;
-      var stateFeatures = topojson.feature(world, world.objects.states).features;
+      //var stateFeatures = topojson.feature(world, world.objects.states).features;
 
 
       app.projection =  d3.geo.mercator()
@@ -122,7 +213,7 @@ var APP = function () {
       app.zoom =  d3.behavior.zoom()
                     .translate([0, 0])
                     .scale(1)
-                    .scaleExtent([1, 500])
+                    .scaleExtent([1, 27])
                     .on("zoom", app.f.behaviors.zoom);
 
       var path = d3.geo.path()
@@ -143,6 +234,7 @@ var APP = function () {
 
 
     //TODO fix the states, show all of US and canada?
+    /*
     states.selectAll("path")
           .data(stateFeatures)
           .enter().append("path")
@@ -155,63 +247,111 @@ var APP = function () {
           .datum(topojson.mesh(world, world.objects.states))
           .attr("class", "mesh")
           .attr("d", path);
+          */
 
     },
 
 
     drawPlayers: function () {
       //TODO make this data static before runtime
-      var players = _.chain(app.playerLocations.values()).pluck('players').flatten().value();
+      var players = app.players =   _.chain(app.playerLocations.values())
+                                     .pluck('players')
+                                     .flatten()
+                                     .reduce(function(memo, p){
+                                        memo[p.id] = p;
+                                        return memo;
+                                     }, {})
+                                     .value();
       var projection = app.projection;
 
       app.players_g
         .selectAll("circle")
-        .data(players)
+        .data(_.values(players))
         .enter().append("circle")
+        .attr("id", function(d) {
+          return d.id;
+        })
         .attr("cx", function (d) {
-          var loc = d.location;
-          return projection([loc.lng, loc.lat])[0];
+          return d.projection.x;
         })
         .attr("cy", function (d) {
           return -20;
         })
         .attr("class", "player")
         .attr("r", app.playerSize / app.zoom.scale())
-        .on("mouseover", function(d) {
-          /*
-          tooltipDiv.transition()
-              .duration(200)
-              .style("opacity", .9);
-          tooltipDiv.html(tooltipFor(d))
-              .style("left", (d3.event.pageX) + 30 + "px")
-              .style("top", (d3.event.pageY - 28) + "px");
-              */
-        })
-        .on("mouseout", function(d) {
-          /*
-          tooltipDiv.transition()
-              .duration(500)
-              .style("opacity", 0);
-              */
-        })
+        .on("mouseover", app.f.showPlayerHud )
+        .on("mouseout", app.f.hidePlayerHud )
         .on("click", app.f.behaviors.playerClicked)
+
+
         .transition().duration(2000)
-        .delay(function(d, i) { return (i * 10) + 750; })
-        //.delay(750)
-        /*
-        .delay(function () {
-          return app.f.randomIntFromInterval(500, 1500);
-        })
-        */
+        .delay(function(d, i) { return (i * 3); })
         .attr("cx", function (d) {
-          var loc = d.location;
-          return projection([loc.lng, loc.lat])[0];
+          return d.projection.x
         })
         .attr("cy", function (d) {
           var loc = d.location;
-          return projection([loc.lgn, loc.lat])[1];
+          return d.projection.y
         })
+
     },
+
+
+    showPlayerHud: function (player) {
+        app.playerHudPinned = false;
+        var hud = app.playerHud;
+
+        hud.find("#hudName").text(player.name);
+        hud.find("#hudTeam").text(player.team);
+        hud.find("#hudTown").text(player.town);
+        hud.find("#hudPosition").text(player.position);
+        hud.find("#hudNumber").text(player.number);
+        hud.find("#hudHeadshot").attr("src", player.headshot);
+
+        var textWidth = Math.max(
+          player.name.length * 15 + 30,
+          player.town.length * 9,
+          250
+        );
+
+        var width = textWidth + 100;
+        var offset = $("#"+player.id).offset();
+
+        hud.css({
+          left: offset.left - width/2 + "px",
+          top: offset.top - 145 + "px",
+          width: width + "px",
+        })
+        /*
+        hud.css({
+              left: d3.event.pageX - width/2 + "px",
+              top: d3.event.pageY - 145 + "px"
+            })
+        */
+            .removeClass("hidden")
+    },
+
+
+    hidePlayerHud: function () {
+      if( !app.playerHudPinned ) {
+        app.playerHud.addClass("hidden");
+      }
+    },
+
+
+    pinPlayerHud: function (player) {
+      var width = parseInt(app.playerHud.css("width").split("px")[0]);
+      var offset = $("#"+player.id).offset();
+
+      app.playerHud.css({
+        left: offset.left - width/2 + "px",
+        top: offset.top - 145 + "px"
+      })
+      .removeClass("hidden");
+
+      app.playerHudPinned = player;
+    },
+
 
 
     showPlayersFor: function (country) {
@@ -229,15 +369,72 @@ var APP = function () {
     },
 
 
+
+
+
+
+    playerSearchClick: function () {
+      var id = $(this).data("id");
+      var el = $("#"+id)[0];
+      var player = app.players[id];
+      app.f.showPlayerHud(player)
+      app.f.behaviors.playerClicked.call(el, player);
+    },
+
+
+
+
+
+    filterSearch: function () {
+      var $this = $(this);
+      var delay = 500;
+
+      clearTimeout($this.data('timer'));
+      $this.data('timer', setTimeout(function(){
+        console.log('starting search');
+        $this.removeData('timer');
+        var text = $this.val();
+        var regexp = new RegExp(text, 'i');
+
+        var ps = _.filter(app.players, function(p) {
+          return regexp.test(p.name) ||
+                 regexp.test(p.team) ||
+                 regexp.test(p.town) ;
+        });
+
+        //$searchResults.children().remove();
+        var html = '';
+        _.each(ps, function(p) {
+          html +=  '<div class="sr" data-id="'+p.id+'">' +
+            p.name +
+            '</div>';
+        });
+
+        var $searchResults = $("#searchResults");
+        $searchResults.html(html);
+        $('.sr').click(app.f.playerSearchClick);
+
+      }, delay));
+    },
+
+
+
+
+
     behaviors: {
 
       zoom: function () {
         var players_g = app.players_g,
             features_g = app.features_g;
+
         players_g.selectAll('circle').attr("r", app.playerSize / d3.event.scale);
-        features_g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
         features_g.selectAll(".mesh").style("stroke-width", 1 / d3.event.scale + "px");
         features_g.select(".states").style("stroke-width", 1 / d3.event.scale + "px");
+        features_g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+
+        if(app.playerHudPinned) {
+          app.f.pinPlayerHud(app.playerHudPinned);
+        }
       },
 
 
@@ -261,9 +458,14 @@ var APP = function () {
 
         app.svg.transition()
                 .duration(750)
-                .call(app.zoom.translate(translate).scale(scale).event);
+                .call(app.zoom.translate(translate).scale(scale).event)
+                .each("start", app.f.hidePlayerHud)
+                .each("end", function () {
+                  app.f.pinPlayerHud(d);
+                });
 
         app.f.showPlayersFor(d.country);
+
       },
 
 
@@ -277,7 +479,8 @@ var APP = function () {
 
         app.svg.transition()
             .duration(750)
-            .call(app.zoom.translate([0, 0]).scale(1).event);
+            .call(app.zoom.translate([0, 0]).scale(1).event)
+            .each("start", app.f.hidePlayerHud);
       },
 
       // If the drag behavior prevents the default click,
@@ -290,7 +493,8 @@ var APP = function () {
 
   }
 
-
+  $("#playerSearch").on("input", app.f.filterSearch);
+  $("#resetZoom").click(app.f.behaviors.reset);
 }
 
 var app;
@@ -306,7 +510,7 @@ queue()
 function makePlayerMap(players) {
   var locations = d3.map();
 
-  _.each(players, function (p) {
+  _.each(players, function (p, i) {
     if( p.geo.status !== 'OK' ) return;
 
     var geo = p.geo.results[0];
@@ -324,25 +528,29 @@ function makePlayerMap(players) {
       var key;
 
       var countryName = country.short_name;
-      if( countryName !== 'US' && countryName !== 'CA' ) {
-        key = countryName;
-      } else {
-        //key = state.long_name;
-        key = countryName;
-      }
 
       var loc = locations.get(key) || {};
       var players = loc.players || [];
       var count = loc.count || 0;
 
+      var geoLocation = geo.geometry.location;
+
+      var proj = app.projection([geoLocation.lng, geoLocation.lat]);
       players.push({
+        id: "p_"+i,
         name: p.name,
-        location: geo.geometry.location,
+        location: geoLocation,
         country: countryName,
         birthday: p.birthday,
-        town: p.birthplace,
-        team: p.currentTeam,
-        position: p.position
+        town: p.town,
+        team: p.team,
+        number: p.number.length ? "#" + p.number : "",
+        position: p.position,
+        headshot: "/images/headshots/"+p.id+".jpg",
+        projection: {
+          x: proj[0],
+          y: proj[1]
+        }
       })
 
       locations.set(key, {
@@ -363,3 +571,5 @@ function makePlayerMap(players) {
 
 
 </script>
+</body>
+</html>
