@@ -10,19 +10,30 @@ html, body{
 
 body {
   background: #000;
-  min-width: 1200px;
+  min-width: 1275px;
 }
 
 #container {
   height: 960px;
+  margin-right: auto;
+  width: 1275x;
 }
 
 
 #searchArea {
   height: 100%;
-  width: 210px;
+  width: 315px;
   float: left;
   background: transparant;
+}
+
+#filterModeInfo {
+  font-size: 12px;
+  display: block;
+  margin-bottom: 0px;
+  letter-spacing: 13px;
+  color: #778899;
+
 }
 
 #searchResults {
@@ -30,6 +41,7 @@ body {
   overflow: scroll;
   padding-top: 10px;
 }
+
 
 .map {
   float: left;
@@ -42,6 +54,32 @@ body {
   z-index: 999;
   float: right;
   font-size: 24px;
+}
+
+#resetZoom:hover {
+  text-decoration: underline;
+}
+
+#selectionModes {
+  float: left;
+  margin-top: 5px;
+}
+
+.selectionBtn {
+  cursor: pointer;
+  color: #eee;
+  border: 2px;
+  border-color: #fff;
+  font-size: 18px;
+  margin-right: 10px;
+}
+
+.selectionBtn:hover {
+  text-decoration: overline;
+}
+
+.selectionBtn.selected {
+  text-decoration: overline;
 }
 
 .land {
@@ -65,6 +103,7 @@ body {
 .player {
   fill: rgb(166,189,219);
   cursor: pointer;
+  fill-opacity: .5;
 }
 
 .player.selected {
@@ -74,13 +113,36 @@ body {
 
 .player.active {
   fill: rgb(43,140,190);
+  fill-opacity: 1;
 }
 
 
 .sr {
   cursor: pointer;
   color: white;
-  padding-bottom: 5px;
+  padding-bottom: 8px;
+}
+
+.sr.selected {
+  font-weight: bold;
+}
+
+.sr:hover {
+  font-size: 14px;
+}
+
+.sr img {
+  width: 45px;
+  height: 45px;
+  float: left;
+  padding-top: 8px;
+  padding-right: 12px;
+}
+
+ul.playerCard {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
 
@@ -142,7 +204,7 @@ div.hud {
 
 <div id="container">
   <div id="searchArea">
-    <div id="searchInput" class="hidden">
+    <div id="searchInput" class="">
       <input id="playerSearch">
     </div>
     <div id="searchResults">
@@ -150,7 +212,15 @@ div.hud {
   </div>
 
   <div class="map">
-    <div id="resetZoom" class="hidden" > Reset Zoom </div>
+    <div id="toolbar">
+      <span id="filterModeInfo">FILTER MODE</span>
+      <p id="selectionModes">
+        <a class="selectionBtn selected" id="byRegion">REGION</a>
+        <a class="selectionBtn" id="byTeam">TEAM</a>
+        <a class="selectionBtn"  id="byPlayer">PLAYER</a>
+      </p>
+      <div id="resetZoom" class="" >RESET ZOOM</div>
+    </div>
     <svg id="visualization"> </svg>
   </div>
 </div>
@@ -162,13 +232,21 @@ div.hud {
 <script>
 'use strict'
 
+d3.selection.prototype.moveToFront = function() {
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
 var APP = function () {
   var app = this;
   app.width = 960;
   app.height = 960;
   app.playerSize = 4;
   app.active = d3.select(null);
-  app.playerHudPinned = false;
+  app.playerHudPinned = null;
+  app.$selectionModes = $("#selectionModes");
+  app.playerSelections = [];
 
   app.f = {
     init: function (error, world, playerData) {
@@ -179,6 +257,7 @@ var APP = function () {
           .on("click", app.f.behaviors.stopped, true);
 
       app.playerHud = $("#playerHud")
+      app.selectionMode = app.f.selectionModes.byRegion;
 
       var features_g = app.features_g = svg.append("g");
       app.land_g = features_g.append("g").attr("class", "land");
@@ -201,7 +280,7 @@ var APP = function () {
 
     drawMap: function(world) {
       var countryFeatures = topojson.feature(world, world.objects.countries).features;
-      //var stateFeatures = topojson.feature(world, world.objects.states).features;
+      var stateFeatures = topojson.feature(world, world.objects.states).features;
 
 
       app.projection =  d3.geo.mercator()
@@ -233,8 +312,6 @@ var APP = function () {
           .attr("d", path);
 
 
-    //TODO fix the states, show all of US and canada?
-    /*
     states.selectAll("path")
           .data(stateFeatures)
           .enter().append("path")
@@ -247,7 +324,6 @@ var APP = function () {
           .datum(topojson.mesh(world, world.objects.states))
           .attr("class", "mesh")
           .attr("d", path);
-          */
 
     },
 
@@ -298,7 +374,7 @@ var APP = function () {
 
 
     showPlayerHud: function (player) {
-        app.playerHudPinned = false;
+        app.playerHudPinned = null;
         var hud = app.playerHud;
 
         hud.find("#hudName").text(player.name);
@@ -322,24 +398,20 @@ var APP = function () {
           top: offset.top - 145 + "px",
           width: width + "px",
         })
-        /*
-        hud.css({
-              left: d3.event.pageX - width/2 + "px",
-              top: d3.event.pageY - 145 + "px"
-            })
-        */
-            .removeClass("hidden")
+        .removeClass("hidden")
     },
 
 
-    hidePlayerHud: function () {
-      if( !app.playerHudPinned ) {
+    hidePlayerHud: function (force) {
+      if( force || !app.playerHudPinned ) {
         app.playerHud.addClass("hidden");
+        app.playerHudPinned = null;
       }
     },
 
 
     pinPlayerHud: function (player) {
+      app.f.showPlayerHud(player)
       var width = parseInt(app.playerHud.css("width").split("px")[0]);
       var offset = $("#"+player.id).offset();
 
@@ -353,36 +425,14 @@ var APP = function () {
     },
 
 
-
-    showPlayersFor: function (country) {
-      app.players_g.selectAll("circle")
-               .filter(function(d) {
-                  return d.country === country;
-               })
-               .classed("active", true);
-    },
-
-
-
-    randomIntFromInterval: function (min,max) {
-        return Math.floor(Math.random()*(max-min+1)+min);
-    },
-
-
-
-
-
-
     playerSearchClick: function () {
-      var id = $(this).data("id");
+      var $this = $(this);
+      var id = $this.data("id");
       var el = $("#"+id)[0];
       var player = app.players[id];
-      app.f.showPlayerHud(player)
       app.f.behaviors.playerClicked.call(el, player);
+      $this.addClass("selected");
     },
-
-
-
 
 
     filterSearch: function () {
@@ -391,34 +441,117 @@ var APP = function () {
 
       clearTimeout($this.data('timer'));
       $this.data('timer', setTimeout(function(){
-        console.log('starting search');
         $this.removeData('timer');
         var text = $this.val();
+
+        if(!text) app.f.behaviors.reset();
+
         var regexp = new RegExp(text, 'i');
 
         var ps = _.filter(app.players, function(p) {
-          return regexp.test(p.name) ||
-                 regexp.test(p.team) ||
-                 regexp.test(p.town) ;
+          return regexp.test(p.searchString);
         });
 
-        //$searchResults.children().remove();
         var html = '';
         _.each(ps, function(p) {
           html +=  '<div class="sr" data-id="'+p.id+'">' +
-            p.name +
+            '<img src="' + p.logo + '"/>' +
+            '<ul class="playerCard">' +
+            '<li>'+ p.name + '</li>' +
+            '<li>'+ p.team + '</li>' +
+            '<li>'+ p.town + '</li>' +
+            '</ul>' +
             '</div>';
         });
 
         var $searchResults = $("#searchResults");
         $searchResults.html(html);
-        $('.sr').click(app.f.playerSearchClick);
 
       }, delay));
     },
 
 
+    selectionModes: {
 
+      byRegion: function (data) {
+        var loc = data.location,
+            proj = app.projection([loc.lng, loc.lat]),
+            x = proj[0],
+            y = proj[1],
+            scale = Math.max(app.zoom.scale(), 7),
+            translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
+
+        app.svg.transition()
+                .duration(750)
+                .call(app.zoom.translate(translate).scale(scale).event)
+                .each("start", function () {
+                  app.f.hidePlayerHud(true)
+                })
+                .each("end", function () {
+                  app.f.pinPlayerHud(data);
+                });
+
+        var region = data.country;
+        app.players_g.selectAll("circle")
+                 .filter(function(d) {
+                    return d.country === region;
+                 })
+                 .classed("active", true);
+      },
+
+      byTeam: function (data) {
+        var team = data.team;
+        app.players_g.selectAll("circle")
+         .filter(function(d) {
+            return d.team === team;
+         })
+         .moveToFront()
+         .classed("active", true);
+
+
+      },
+
+      byPlayer: function (data) {
+        var loc = data.location,
+            proj = app.projection([loc.lng, loc.lat]),
+            x = proj[0],
+            y = proj[1],
+            scale = Math.max(app.zoom.scale(), 7),
+            translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
+
+        if( app.multiSelect && _.contains(app.playerSelections, this) ) {
+          var self = this;
+          app.playerSelections = _.remove(app.playerSelections, function(p) {
+            return p === this;
+          });
+
+        } else {
+
+          app.svg.transition()
+                  .duration(750)
+                  .call(app.zoom.translate(translate).scale(scale).event)
+                  .each("start", function () {
+                    app.f.hidePlayerHud(true);
+                  })
+                  .each("end", function () {
+                    app.f.pinPlayerHud(data);
+                  });
+
+          if(!app.multiSelect) {
+            app.playerSelections = [];
+          }
+
+          app.playerSelections.push(this);
+        }
+
+
+        d3.selectAll(app.playerSelections)
+          .moveToFront()
+          .classed("active", true);
+      }
+
+
+    },
 
 
     behaviors: {
@@ -441,60 +574,82 @@ var APP = function () {
 
       playerClicked: function (d) {
         var active = app.active;
-        if (active.node() === this) return app.f.behaviors.reset();
+        if (active.node() === this) {
+          app.active = d3.select(null);
+          return app.f.behaviors.reset();
+        }
 
         app.players_g.selectAll("circle").classed("active selected", false);
 
         active.classed("active", false);
+        $(".sr").removeClass("selected");
 
-        app.active = d3.select(this).classed("active selected", true);
+        active = app.active = d3.select(this).classed("active selected", true);
+        active.moveToFront();
 
-        var loc = d.location,
-            proj = app.projection([loc.lng, loc.lat]),
-            x = proj[0],
-            y = proj[1],
-            scale = Math.max(app.zoom.scale(), 7),
-            translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
 
-        app.svg.transition()
-                .duration(750)
-                .call(app.zoom.translate(translate).scale(scale).event)
-                .each("start", app.f.hidePlayerHud)
-                .each("end", function () {
-                  app.f.pinPlayerHud(d);
-                });
 
-        app.f.showPlayersFor(d.country);
-
+        app.selectionMode.call(this, d);
       },
 
 
 
       reset: function () {
-        app.players_g.selectAll("circle").classed("active selected", false);
-        app.active.classed("active selected", false);
+        //app.players_g.selectAll("circle").classed("active selected", false);
+        //app.active.classed("active selected", false);
 
 
-        app.active = d3.select(null);
+        //app.active = d3.select(null);
 
         app.svg.transition()
             .duration(750)
             .call(app.zoom.translate([0, 0]).scale(1).event)
-            .each("start", app.f.hidePlayerHud);
+            .each("start", function() {
+              app.f.hidePlayerHud(true);
+            });
       },
 
       // If the drag behavior prevents the default click,
       // also stop propagation so we don’t click-to-zoom.
       stopped: function () {
         if (d3.event.defaultPrevented) d3.event.stopPropagation();
+      },
+
+      setSelectionMode: function (mode) {
+        return function () {
+          app.$selectionModes.children().removeClass("selected");
+          $(this).addClass("selected");
+          app.selectionMode = mode;
+          app.players_g.selectAll("circle").classed("active selected", false);
+          app.active.classed("active selected", false);
+          app.active = d3.select(null);
+          app.f.behaviors.reset();
+        }
       }
-
     }
-
   }
 
+  var $byRegion = $("#byRegion");
+  var $byTeam = $("#byTeam");
+  var $byPlayer = $("#byPlayer");
+
+  $(document).keydown(function(event){
+    if(event.which=="17" || event.which=="91" || event.which=="93") {
+      app.multiSelect = true;
+    }
+  });
+
+  $(document).keyup(function(){
+      app.multiSelect = false;
+  });
+
   $("#playerSearch").on("input", app.f.filterSearch);
+  $("#searchResults").on("click", ".sr", app.f.playerSearchClick);
   $("#resetZoom").click(app.f.behaviors.reset);
+  $byRegion.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byRegion) );
+  $byTeam.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byTeam) );
+  $byPlayer.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byPlayer) );
+
 }
 
 var app;
@@ -534,6 +689,9 @@ function makePlayerMap(players) {
       var count = loc.count || 0;
 
       var geoLocation = geo.geometry.location;
+      state = state ? state.long_name : '';
+
+      var logoName = p.team.toLowerCase().replace(/ +/g, "-").replace(/\./g, '').replace(/é/,'e');
 
       var proj = app.projection([geoLocation.lng, geoLocation.lat]);
       players.push({
@@ -543,10 +701,13 @@ function makePlayerMap(players) {
         country: countryName,
         birthday: p.birthday,
         town: p.town,
+        locale: state,
         team: p.team,
         number: p.number.length ? "#" + p.number : "",
         position: p.position,
         headshot: "/images/headshots/"+p.id+".jpg",
+        logo: "/images/logos/"+logoName+".svg",
+        searchString: [p.name, p.town, state, p.team].join(" "),
         projection: {
           x: proj[0],
           y: proj[1]
