@@ -25,16 +25,16 @@ body {
 
 #searchArea {
   height: 100%;
-  width: 315px;
+  width: 320px;
   float: left;
   background: transparant;
 }
 
-#filterModeInfo {
+#selectionModeInfo {
   font-size: 12px;
   display: block;
   margin-bottom: 0px;
-  letter-spacing: 13px;
+  letter-spacing: 8px;
   color: #778899;
 
 }
@@ -121,17 +121,30 @@ body {
 
 
 .sr {
-  cursor: pointer;
-  color: white;
+  cursor: none;
+  color: #a6bddb;
   padding-bottom: 8px;
+  padding-left: 10px;
+  margin-left: 5px;
 }
 
 .sr.selected {
-  font-weight: bold;
+  color: #2b8cbe;
+  margin-right: 5px;
+  border-right-width: 5px;
+  border-right-style: solid;
+  border-left-width: 5px;
+  padding-left: 5px;
+  border-left-style: solid;
 }
 
 .sr:hover {
-  font-size: 14px;
+  border-left-width: 5px;
+  padding-left: 5px;
+  border-left-style: solid;
+  border-right-width: 5px;
+  margin-right: 5px;
+  border-right-style: solid;
 }
 
 .sr img {
@@ -216,7 +229,7 @@ div.hud {
 
   <div class="map">
     <div id="toolbar">
-      <span id="filterModeInfo">FILTER MODE</span>
+      <span id="selectionModeInfo">SELECTION MODE</span>
       <p id="selectionModes">
         <a class="selectionBtn selected" id="byRegion">REGION</a>
         <a class="selectionBtn" id="byTeam">TEAM</a>
@@ -625,7 +638,6 @@ var APP = function () {
           app.selectionMode = mode;
           app.players_g.selectAll("circle").classed("active selected", false);
           app.active.classed("active selected", false);
-          app.active = d3.select(null);
           app.f.behaviors.reset();
         }
       }
