@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <head>
-<title> NHL around the world </title>
+  <title> NHL around the world </title>
+  <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <style>
 
@@ -40,9 +41,11 @@ body {
 }
 
 #searchResults {
-  height: 100%;
-  overflow: scroll;
-  padding-top: 10px;
+  height: 988px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  margin-top: 10px;
+  direction: rtl;
 }
 
 
@@ -109,14 +112,15 @@ body {
   fill-opacity: .5;
 }
 
-.player.selected {
-  stroke: yellow;
-  stroke-width: .25px;
+.player.active {
+  fill: #9FBC26;
+  fill-opacity: 1;
+  stroke: black;
+  stroke-width: 1px;
 }
 
-.player.active {
-  fill: rgb(43,140,190);
-  fill-opacity: 1;
+.player.selected {
+  fill: #F26F61;
 }
 
 
@@ -129,7 +133,7 @@ body {
 }
 
 .sr.selected {
-  color: #2b8cbe;
+  color: #F26F61;
   margin-right: 5px;
   border-right-width: 5px;
   border-right-style: solid;
@@ -159,6 +163,7 @@ ul.playerCard {
   list-style: none;
   padding: 0;
   margin: 0;
+  text-align: left;
 }
 
 
@@ -197,6 +202,25 @@ div.hud {
   padding-top: 5px;
 }
 
+#searchInput {
+  position: relative;
+}
+
+#playerSearch {
+  height: 30px;
+  width: 80%;
+  border-radius: 36px;
+  padding: 0 20px 0 30px;
+  font-size: 15px;
+}
+
+#searchInput .fa-search {
+  position: absolute;
+  z-index: 1;
+  right: 23px;
+  top: 8px;
+}
+
 
 
 
@@ -222,6 +246,7 @@ div.hud {
   <div id="searchArea">
     <div id="searchInput" class="">
       <input id="playerSearch">
+      <i class="fa fa-search"></i>
     </div>
     <div id="searchResults">
     </div>
@@ -576,7 +601,7 @@ var APP = function () {
         var players_g = app.players_g,
             features_g = app.features_g;
 
-        players_g.selectAll('circle').attr("r", app.playerSize / d3.event.scale);
+        players_g.selectAll('circle').attr("r", app.playerSize / d3.event.scale).style("stroke-width", 1 /d3.event.scale + 'px');
         features_g.selectAll(".mesh").style("stroke-width", 1 / d3.event.scale + "px");
         features_g.select(".states").style("stroke-width", 1 / d3.event.scale + "px");
         features_g.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
@@ -674,7 +699,6 @@ queue()
     .await( function ready(error, world, players) {
       app = new APP();
       app.f.init(error, world, players);
-      d3.select(self.frameElement).style("height", app.height + "px")
     })
 
 function makePlayerMap(players) {
