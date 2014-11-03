@@ -392,8 +392,8 @@ var APP = function () {
       app.states_g = features_g.append("g").attr("class", "states land");
       app.players_g = features_g.append("g").attr("class", "players");
 
-      app.f.drawMap(world);
 
+      app.f.drawMap(world);
 
       app.playerLocations = makePlayerMap(playerData);
       app.f.drawPlayers();
@@ -519,6 +519,9 @@ var APP = function () {
                                      .value();
       var projection = app.projection;
       var showAll = app.showAll;
+      var delaySpacing = showAll ? 3 : 5;
+
+      var shown = 0;
 
       app.players_g
         .selectAll("circle")
@@ -547,12 +550,16 @@ var APP = function () {
 
 
         .transition().duration(2000)
-        .delay(function(d, i) { return (i * 3); })
+        .delay(function(d, i) {
+          if( showAll || d.isActive ) {
+            return ++shown * delaySpacing;
+          }
+          return i * delaySpacing;
+        })
         .attr("cx", function (d) {
           return d.projection.x
         })
         .attr("cy", function (d) {
-          var loc = d.location;
           return d.projection.y
         })
 
@@ -944,8 +951,8 @@ function makePlayerMap(players) {
         number: p.number.length ? "#" + p.number : "",
         position: p.position,
         $playerCard: $playerCard,
-        headshot: headshot,//"/nhl-around-the-world/images/headshots/"+p.id+".jpg",
-        logo: logo,// "/nhl-around-the-world/images/logos/"+logoName+".svg",
+        headshot: headshot,
+        logo: logo,
         searchString: [p.name, p.town, state, p.team].join(" "),
         projection: {
           x: proj[0],
