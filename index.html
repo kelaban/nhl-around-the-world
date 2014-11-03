@@ -107,6 +107,10 @@ body {
   fill: rgb(48,52,56);
 }
 
+.land .noFill{
+  fill: none;
+}
+
 .mesh {
   fill: none;
   stroke: #000;
@@ -115,10 +119,6 @@ body {
 
 .hidden {
   display: none
-}
-
-.states {
-  fill: none;
 }
 
 .player {
@@ -389,7 +389,7 @@ var APP = function () {
 
       var features_g = app.features_g = svg.append("g");
       app.land_g = features_g.append("g").attr("class", "land");
-      app.states_g = features_g.append("g").attr("class", "states");
+      app.states_g = features_g.append("g").attr("class", "states land");
       app.players_g = features_g.append("g").attr("class", "players");
 
       app.f.drawMap(world);
@@ -470,13 +470,26 @@ var APP = function () {
       var land = app.land_g;
       var states = app.states_g;
 
+
+
+      //Dont fill in US or CA, let this happen from the states class
+      //otherwise the Great Lakes will be filled in as part of the land
       land.selectAll("path")
           .data(countryFeatures)
           .enter().append("path")
+          .attr("class", function(d) {
+            if(d.id === 'US' || d.id === 'CA') {
+              return 'noFill';
+            }
+          })
           .attr("d", path);
 
+      //Don't draw country lines, states will show this
+      //Don't draw coast lines as they will blend in anyway
       land.append("path")
-          .datum(topojson.mesh(world, world.objects.countries))
+          .datum(topojson.mesh(world, world.objects.countries, function(a, b) {
+            return a.id !== 'US' && a.id !== 'CA' && a !== b;
+          }))
           .attr("class", "mesh")
           .attr("d", path);
 
@@ -484,9 +497,6 @@ var APP = function () {
     states.selectAll("path")
           .data(stateFeatures)
           .enter().append("path")
-          .attr("class", function(d) {
-            return "hidden " + d.id;
-          })
           .attr("d", path);
 
     states.append("path")
