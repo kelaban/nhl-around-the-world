@@ -41,7 +41,7 @@ body {
 }
 
 #searchResults {
-  height: 988px;
+  height: 975px;
   overflow-x: hidden;
   overflow-y: scroll;
   margin-top: 10px;
@@ -113,7 +113,7 @@ body {
 }
 
 .player.active {
-  fill: #9FBC26;
+  fill: #8CFF96;
   fill-opacity: 1;
   stroke: black;
   stroke-width: 1px;
@@ -214,6 +214,10 @@ div.hud {
   font-size: 15px;
 }
 
+#playerSearch:focus {
+  outline: 0;
+}
+
 #searchInput .fa-search {
   position: absolute;
   z-index: 1;
@@ -287,6 +291,8 @@ var APP = function () {
   app.active = d3.select(null);
   app.playerHudPinned = null;
   app.$selectionModes = $("#selectionModes");
+  app.$playerSearch = $("#playerSearch");
+  app.$searchResults = $("#searchResults");
   app.playerSelections = [];
 
   app.f = {
@@ -310,12 +316,36 @@ var APP = function () {
 
       app.playerLocations = makePlayerMap(playerData);
       app.f.drawPlayers();
-      $("#playerSearch").trigger("input");
+      //app.$playerSearch.trigger("input");
+
+      app.$searchResults.append(_.pluck(app.players, "$playerCard"));
+
       $("#searchInput").removeClass("hidden");
       $("#resetZoom").removeClass("hidden");
 
       //initialize zoom handling
       svg.call(app.zoom).call(app.zoom.event);
+
+      var $byRegion = $("#byRegion");
+      var $byTeam = $("#byTeam");
+      var $byPlayer = $("#byPlayer");
+
+      $(document).keydown(function(event){
+        if(event.which=="17" || event.which=="91" || event.which=="93") {
+          app.multiSelect = true;
+        }
+      });
+
+      $(document).keyup(function(){
+          app.multiSelect = false;
+      });
+
+      app.$playerSearch.on("input", app.f.filterSearch);
+      app.$searchResults.on("click", ".sr", app.f.playerSearchClick);
+      $("#resetZoom").click(app.f.behaviors.reset);
+      $byRegion.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byRegion) );
+      $byTeam.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byTeam) );
+      $byPlayer.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byPlayer) );
     },
 
 
@@ -471,14 +501,14 @@ var APP = function () {
       var id = $this.data("id");
       var el = $("#"+id)[0];
       var player = app.players[id];
-      app.f.behaviors.playerClicked.call(el, player);
+      app.f.behaviors.playerClicked.call(el, player, true);
       $this.addClass("selected");
     },
 
 
     filterSearch: function () {
       var $this = $(this);
-      var delay = 500;
+      var delay = 100;
 
       clearTimeout($this.data('timer'));
       $this.data('timer', setTimeout(function(){
@@ -489,10 +519,17 @@ var APP = function () {
 
         var regexp = new RegExp(text, 'i');
 
-        var ps = _.filter(app.players, function(p) {
-          return regexp.test(p.searchString);
+        var ps = _.each(app.players, function(p) {
+
+          if(regexp.test(p.searchString)) {
+            p.$playerCard.removeClass("hidden");
+          } else {
+            p.$playerCard.addClass("hidden")
+          }
+
         });
 
+/*
         var html = '';
         _.each(ps, function(p) {
           html +=  '<div class="sr" data-id="'+p.id+'">' +
@@ -503,18 +540,27 @@ var APP = function () {
             '<li>'+ p.town + '</li>' +
             '</ul>' +
             '</div>';
+
         });
 
         var $searchResults = $("#searchResults");
         $searchResults.html(html);
+        */
 
       }, delay));
     },
 
 
+    updateSearch: function(val, disabled) {
+      if(!disabled) {
+        app.$playerSearch.val(val).trigger("input");
+      }
+    },
+
+
     selectionModes: {
 
-      byRegion: function (data) {
+      byRegion: function (data, disableSearch) {
         var loc = data.location,
             proj = app.projection([loc.lng, loc.lat]),
             x = proj[0],
@@ -538,21 +584,38 @@ var APP = function () {
                     return d.country === region;
                  })
                  .classed("active", true);
+
+        app.f.updateSearch(data.town, disableSearch);
       },
 
-      byTeam: function (data) {
+      byTeam: function (data, disableSearch) {
         var team = data.team;
         app.players_g.selectAll("circle")
-         .filter(function(d) {
+          .filter(function(d) {
             return d.team === team;
-         })
-         .moveToFront()
-         .classed("active", true);
+          })
+          .moveToFront()
+          .classed("active", true);
 
+        var playerNode = d3.select(this),
+            old_r = playerNode.attr("r"),
+            fancy_r = old_r * 5;
+
+
+        playerNode
+          .attr("r", fancy_r)
+          .transition()
+          .duration(750)
+          .attr("r", function () {
+            return app.playerSize / app.zoom.scale();
+          });
+
+
+        app.f.updateSearch(team, disableSearch);
 
       },
 
-      byPlayer: function (data) {
+      byPlayer: function (data, disableSearch) {
         var loc = data.location,
             proj = app.projection([loc.lng, loc.lat]),
             x = proj[0],
@@ -589,6 +652,9 @@ var APP = function () {
         d3.selectAll(app.playerSelections)
           .moveToFront()
           .classed("active", true);
+
+        app.f.updateSearch(data.name, disableSearch);
+
       }
 
 
@@ -613,10 +679,9 @@ var APP = function () {
 
 
 
-      playerClicked: function (d) {
+      playerClicked: function (d, fromSidebar) {
         var active = app.active;
         if (active.node() === this) {
-          app.active = d3.select(null);
           return app.f.behaviors.reset();
         }
 
@@ -624,13 +689,21 @@ var APP = function () {
 
         active.classed("active", false);
         $(".sr").removeClass("selected");
+        d.$playerCard.addClass("selected");
 
         active = app.active = d3.select(this).classed("active selected", true);
         active.moveToFront();
 
 
+        app.selectionMode.call(this, d, fromSidebar === true);
 
-        app.selectionMode.call(this, d);
+        if( fromSidebar !== true) {
+          setTimeout(function () {
+            var newTop = app.$searchResults.scrollTop() + d.$playerCard.position().top - 60;
+            console.log(newTop);
+            app.$searchResults.scrollTop(newTop);
+          }, 200);
+        }
       },
 
 
@@ -661,34 +734,18 @@ var APP = function () {
           app.$selectionModes.children().removeClass("selected");
           $(this).addClass("selected");
           app.selectionMode = mode;
-          app.players_g.selectAll("circle").classed("active selected", false);
-          app.active.classed("active selected", false);
           app.f.behaviors.reset();
+
+          var active = app.active;
+          if(active.node()) {
+            app.active = d3.select(null);
+            app.f.behaviors.playerClicked.call(active.node(), active.data()[0], false);
+          }
         }
       }
     }
   }
 
-  var $byRegion = $("#byRegion");
-  var $byTeam = $("#byTeam");
-  var $byPlayer = $("#byPlayer");
-
-  $(document).keydown(function(event){
-    if(event.which=="17" || event.which=="91" || event.which=="93") {
-      app.multiSelect = true;
-    }
-  });
-
-  $(document).keyup(function(){
-      app.multiSelect = false;
-  });
-
-  $("#playerSearch").on("input", app.f.filterSearch);
-  $("#searchResults").on("click", ".sr", app.f.playerSearchClick);
-  $("#resetZoom").click(app.f.behaviors.reset);
-  $byRegion.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byRegion) );
-  $byTeam.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byTeam) );
-  $byPlayer.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byPlayer) );
 
 }
 
@@ -702,6 +759,7 @@ queue()
     })
 
 function makePlayerMap(players) {
+  var IMAGE_LOCATION = "/nhl-around-the-world/images"
   var locations = d3.map();
 
   _.each(players, function (p, i) {
@@ -731,10 +789,22 @@ function makePlayerMap(players) {
       state = state ? state.long_name : '';
 
       var logoName = p.team.toLowerCase().replace(/ +/g, "-").replace(/\./g, '').replace(/é/,'e');
+      var logo = IMAGE_LOCATION + "/logos/"+logoName+".svg";
+      var headshot = IMAGE_LOCATION + "/headshots/"+p.id+".jpg";
+      var id = "p_"+i;
+
+      var $playerCard = $('<div class="sr" data-id="'+id+'">' +
+            '<img src="' + logo + '"/>' +
+            '<ul class="playerCard">' +
+            '<li>'+ p.name + '</li>' +
+            '<li>'+ p.team + '</li>' +
+            '<li>'+ p.town + '</li>' +
+            '</ul>' +
+            '</div>');
 
       var proj = app.projection([geoLocation.lng, geoLocation.lat]);
       players.push({
-        id: "p_"+i,
+        id: id,
         name: p.name,
         location: geoLocation,
         country: countryName,
@@ -744,8 +814,9 @@ function makePlayerMap(players) {
         team: p.team,
         number: p.number.length ? "#" + p.number : "",
         position: p.position,
-        headshot: "/nhl-around-the-world/images/headshots/"+p.id+".jpg",
-        logo: "/nhl-around-the-world/images/logos/"+logoName+".svg",
+        $playerCard: $playerCard,
+        headshot: headshot,//"/nhl-around-the-world/images/headshots/"+p.id+".jpg",
+        logo: logo,// "/nhl-around-the-world/images/logos/"+logoName+".svg",
         searchString: [p.name, p.town, state, p.team].join(" "),
         projection: {
           x: proj[0],
