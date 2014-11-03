@@ -28,6 +28,7 @@ body {
   height: 100%;
   width: 320px;
   float: left;
+  margin-right: 12px;
   background: transparant;
 }
 
@@ -44,7 +45,7 @@ body {
 
 #optionsInfo {
   margin-left: 50px;
-  letter-spacing: 9px;
+  letter-spacing: 25px;
 }
 
 #searchResults {
@@ -66,7 +67,7 @@ body {
   cursor: pointer;
   z-index: 999;
   float: right;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 #resetZoom:hover {
@@ -340,6 +341,7 @@ div.hud .arrow {
       </p>
       <p id="options">
         <a class="selectionBtn selected tooltip" id="autoZoom" tooltip="Enable/Disable automatic zooming and panning">AUTO ZOOM</a>
+        <a class="selectionBtn tooltip" id="showAll" tooltip="Show all drafted NHL players or only players that have played a game in the 2014/2015 season">SHOW ALL</a>
       </div>
       <div id="resetZoom" class="" >RESET ZOOM</div>
     </div>
@@ -371,6 +373,7 @@ var APP = function () {
   app.$playerSearch = $("#playerSearch");
   app.$searchResults = $("#searchResults");
   app.doZoom = true;
+  app.showAll = false;
   app.playerSelections = [];
 
   app.f = {
@@ -394,9 +397,9 @@ var APP = function () {
 
       app.playerLocations = makePlayerMap(playerData);
       app.f.drawPlayers();
-      //app.$playerSearch.trigger("input");
 
       app.$searchResults.append(_.pluck(app.players, "$playerCard"));
+      app.$playerSearch.trigger("input");
 
       $("#searchInput").removeClass("hidden");
       $("#resetZoom").removeClass("hidden");
@@ -435,6 +438,12 @@ var APP = function () {
           app.f.behaviors.reset();
         }
       });
+
+      $("#showAll").click(function () {
+        app.showAll = $(this).toggleClass("selected").hasClass("selected");
+        app.f.filterActivePlayers();
+      });
+
     },
 
 
@@ -499,6 +508,7 @@ var APP = function () {
                                      }, {})
                                      .value();
       var projection = app.projection;
+      var showAll = app.showAll;
 
       app.players_g
         .selectAll("circle")
@@ -513,7 +523,13 @@ var APP = function () {
         .attr("cy", function (d) {
           return -20;
         })
-        .attr("class", "player")
+        .attr("class", function(d) {
+          var cls = "player";
+          if(showAll || !d.isActive) {
+            cls += " hidden";
+          }
+          return cls;
+        })
         .attr("r", app.playerSize / app.zoom.scale())
         .on("mouseover", app.f.showPlayerHud )
         .on("mouseout", app.f.hidePlayerHud )
@@ -608,33 +624,19 @@ var APP = function () {
 
         var regexp = new RegExp(text, 'i');
 
-        var ps = _.each(app.players, function(p) {
+        var showAll = app.showAll;
+        _.each(app.players, function(p) {
 
-          if(regexp.test(p.searchString)) {
+          var show = ( showAll || p.isActive ) &&
+                      regexp.test(p.searchString)
+
+
+          if(show) {
             p.$playerCard.removeClass("hidden");
           } else {
             p.$playerCard.addClass("hidden")
           }
-
         });
-
-/*
-        var html = '';
-        _.each(ps, function(p) {
-          html +=  '<div class="sr" data-id="'+p.id+'">' +
-            '<img src="' + p.logo + '"/>' +
-            '<ul class="playerCard">' +
-            '<li>'+ p.name + '</li>' +
-            '<li>'+ p.team + '</li>' +
-            '<li>'+ p.town + '</li>' +
-            '</ul>' +
-            '</div>';
-
-        });
-
-        var $searchResults = $("#searchResults");
-        $searchResults.html(html);
-        */
 
       }, delay));
     },
@@ -668,6 +670,23 @@ var APP = function () {
       } else {
         app.f.pinPlayerHud(data);
       }
+    },
+
+
+    filterActivePlayers: function () {
+      var showAll = app.showAll;
+
+      app.$playerSearch.trigger("input");
+      _.each(app.players, function (p) {
+        var $me = $("#" + p.id);
+          var attrs = $me.attr("class").replace(/hidden/, '');
+        if(!showAll && !p.isActive) {
+          attrs += " hidden";
+        }
+
+        $me.attr("class", attrs);
+      })
+
     },
 
 
@@ -758,7 +777,7 @@ var APP = function () {
       playerClicked: function (d, fromSidebar) {
         var active = app.active;
         if (active.node() === this) {
-          return app.f.behaviors.reset();
+          app.f.behaviors.reset();
         }
 
         app.players_g.selectAll("circle").classed("active selected", false);
@@ -776,7 +795,6 @@ var APP = function () {
         if( fromSidebar !== true) {
           setTimeout(function () {
             var newTop = app.$searchResults.scrollTop() + d.$playerCard.position().top - 60;
-            console.log(newTop);
             app.$searchResults.scrollTop(newTop);
           }, 200);
         }
@@ -890,7 +908,11 @@ function makePlayerMap(players) {
       var headshot = IMAGE_LOCATION + "/headshots/"+p.id+".jpg";
       var id = "p_"+i;
 
-      var $playerCard = $('<div class="sr" data-id="'+id+'">' +
+
+      var divCls = app.showAll || p.isActive ?
+                    "sr" :
+                    "sr hidden";
+      var $playerCard = $('<div class="'+divCls+'" data-id="'+id+'">' +
             '<img src="' + logo + '"/>' +
             '<ul class="playerCard">' +
             '<li>'+ p.name + '</li>' +
@@ -918,7 +940,8 @@ function makePlayerMap(players) {
         projection: {
           x: proj[0],
           y: proj[1]
-        }
+        },
+        isActive: p.isActive
       })
 
       locations.set(key, {
