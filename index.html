@@ -31,13 +31,20 @@ body {
   background: transparant;
 }
 
-#selectionModeInfo {
+#tbTile .title {
   font-size: 12px;
-  display: block;
+  display: inline;
   margin-bottom: 0px;
-  letter-spacing: 8px;
   color: #778899;
+}
 
+#selectionModeInfo {
+  letter-spacing: 8px;
+}
+
+#optionsInfo {
+  margin-left: 50px;
+  letter-spacing: 9px;
 }
 
 #searchResults {
@@ -63,7 +70,13 @@ body {
 }
 
 #resetZoom:hover {
-  text-decoration: underline;
+  text-decoration: overline;
+}
+
+#options {
+  float: left;
+  margin-top: 5px;
+  margin-left: 50px;
 }
 
 #selectionModes {
@@ -86,6 +99,7 @@ body {
 
 .selectionBtn.selected {
   text-decoration: overline;
+  color: #F26F61;
 }
 
 .land {
@@ -178,6 +192,20 @@ div.hud {
   border: 0px;
   border-radius: 8px;
   pointer-events: none;
+
+}
+
+div.hud .arrow {
+  width: 0;
+	height: 0;
+	border-left: 8px solid transparent;
+	border-right: 8px solid transparent;
+	border-top: 8px solid #fff;
+	font-size: 0;
+	line-height: 0;
+  left: 46%;
+  bottom: -12px;
+  position: absolute;
 }
 
 .hud .title {
@@ -222,10 +250,50 @@ div.hud {
   position: absolute;
   z-index: 1;
   right: 23px;
-  top: 8px;
+  top: 10px;
 }
 
+#searchInput .fa-times {
+  cursor: pointer;
+  position: absolute;
+  z-index: 1;
+  left: 8px;
+  top: 10px;
+}
 
+.tooltip{
+    display: inline;
+    position: relative;
+}
+
+.tooltip:hover:after{
+    background: #333;
+    background: rgba(0,0,0,.8);
+    border-radius: 5px;
+    top: 26px;
+    color: #fff;
+    content: attr(tooltip);
+    left: 20%;
+    padding: 5px 15px;
+    position: absolute;
+    z-index: 98;
+    width: 220px;
+}
+
+.tooltip:hover:before{
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;  /* left arrow slant */
+    border-right: 5px solid transparent; /* right arrow slant */
+    border-bottom: 5px solid #fff; /* bottom, add background color here */
+    font-size: 0;
+    line-height: 0;
+    top: 24px;
+    content: "";
+    left: 50%;
+    position: absolute;
+    z-index: 99;
+}
 
 
 
@@ -244,11 +312,13 @@ div.hud {
     <p id="hudTown" class=""></p>
     <p id="hudPosition" class""></p>
   </div>
+  <div class="arrow"></div>
 </div>
 
 <div id="container">
   <div id="searchArea">
     <div id="searchInput" class="">
+      <i id="clearSearch" class="fa fa-times"></i>
       <input id="playerSearch">
       <i class="fa fa-search"></i>
     </div>
@@ -258,12 +328,19 @@ div.hud {
 
   <div class="map">
     <div id="toolbar">
-      <span id="selectionModeInfo">SELECTION MODE</span>
+      <div id="tbTile">
+        <span class="title" id="selectionModeInfo">SELECTION MODE</span>
+        <span class="title" id="optionsInfo">OPTIONS</span>
+      </div>
+
       <p id="selectionModes">
         <a class="selectionBtn selected" id="byRegion">REGION</a>
         <a class="selectionBtn" id="byTeam">TEAM</a>
-        <a class="selectionBtn"  id="byPlayer">PLAYER</a>
+        <a class="selectionBtn tooltip"  id="byPlayer" tooltip="Hint: ctrl or cmd click to select multiple players. Don't you want to know where your fantasy team is from?">PLAYER</a>
       </p>
+      <p id="options">
+        <a class="selectionBtn selected tooltip" id="autoZoom" tooltip="Enable/Disable automatic zooming and panning">AUTO ZOOM</a>
+      </div>
       <div id="resetZoom" class="" >RESET ZOOM</div>
     </div>
     <svg id="visualization"> </svg>
@@ -293,6 +370,7 @@ var APP = function () {
   app.$selectionModes = $("#selectionModes");
   app.$playerSearch = $("#playerSearch");
   app.$searchResults = $("#searchResults");
+  app.doZoom = true;
   app.playerSelections = [];
 
   app.f = {
@@ -346,6 +424,17 @@ var APP = function () {
       $byRegion.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byRegion) );
       $byTeam.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byTeam) );
       $byPlayer.click( app.f.behaviors.setSelectionMode(app.f.selectionModes.byPlayer) );
+
+      $("#clearSearch").click(function () {
+        app.f.updateSearch("");
+      });
+
+      $("#autoZoom").click(function () {
+        app.doZoom = $(this).toggleClass("selected").hasClass("selected");
+        if(!app.doZoom) {
+          app.f.behaviors.reset();
+        }
+      });
     },
 
 
@@ -558,16 +647,15 @@ var APP = function () {
     },
 
 
-    selectionModes: {
+    zoomTo: function(data) {
+      var loc = data.location,
+          proj = app.projection([loc.lng, loc.lat]),
+          x = proj[0],
+          y = proj[1],
+          scale = Math.max(app.zoom.scale(), 7),
+          translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
 
-      byRegion: function (data, disableSearch) {
-        var loc = data.location,
-            proj = app.projection([loc.lng, loc.lat]),
-            x = proj[0],
-            y = proj[1],
-            scale = Math.max(app.zoom.scale(), 7),
-            translate = [app.width / 2 - scale * x, app.height / 2 - scale * y];
-
+      if(app.doZoom) {
         app.svg.transition()
                 .duration(750)
                 .call(app.zoom.translate(translate).scale(scale).event)
@@ -577,7 +665,16 @@ var APP = function () {
                 .each("end", function () {
                   app.f.pinPlayerHud(data);
                 });
+      } else {
+        app.f.pinPlayerHud(data);
+      }
+    },
 
+
+    selectionModes: {
+
+      byRegion: function (data, disableSearch) {
+        app.f.zoomTo(data);
         var region = data.country;
         app.players_g.selectAll("circle")
                  .filter(function(d) {
@@ -597,20 +694,8 @@ var APP = function () {
           .moveToFront()
           .classed("active", true);
 
-        var playerNode = d3.select(this),
-            old_r = playerNode.attr("r"),
-            fancy_r = old_r * 5;
 
-
-        playerNode
-          .attr("r", fancy_r)
-          .transition()
-          .duration(750)
-          .attr("r", function () {
-            return app.playerSize / app.zoom.scale();
-          });
-
-
+        app.f.zoomTo(data);
         app.f.updateSearch(team, disableSearch);
 
       },
@@ -630,16 +715,7 @@ var APP = function () {
           });
 
         } else {
-
-          app.svg.transition()
-                  .duration(750)
-                  .call(app.zoom.translate(translate).scale(scale).event)
-                  .each("start", function () {
-                    app.f.hidePlayerHud(true);
-                  })
-                  .each("end", function () {
-                    app.f.pinPlayerHud(data);
-                  });
+          app.f.zoomTo(data);
 
           if(!app.multiSelect) {
             app.playerSelections = [];
@@ -704,6 +780,18 @@ var APP = function () {
             app.$searchResults.scrollTop(newTop);
           }, 200);
         }
+        var playerNode = d3.select(this),
+            old_r = playerNode.attr("r"),
+            fancy_r = old_r * 5;
+
+
+        playerNode
+          .attr("r", fancy_r)
+          .transition()
+          .duration(750)
+          .attr("r", function () {
+            return app.playerSize / app.zoom.scale();
+          });
       },
 
 
@@ -734,6 +822,15 @@ var APP = function () {
           app.$selectionModes.children().removeClass("selected");
           $(this).addClass("selected");
           app.selectionMode = mode;
+
+          if(mode === app.f.selectionModes.byTeam) {
+            app.doZoom = false;
+            $("#autoZoom").removeClass("selected");
+          } else {
+            app.doZoom = true;
+            $("#autoZoom").addClass("selected");
+          }
+
           app.f.behaviors.reset();
 
           var active = app.active;
