@@ -296,6 +296,26 @@ div.hud .arrow {
     z-index: 99;
 }
 
+#info {
+  color: #FFF;
+  position: fixed;
+  right: 20px;
+  bottom: 5px;
+  cursor: pointer;
+}
+
+#legal {
+  position: fixed;
+  color: white;
+  background: black;
+  border-radius: 25px;
+  width: 500px;
+  text-align: center;
+  z-index: 999;
+  bottom: 50px;
+  right: 25px;
+}
+
 
 
 </style>
@@ -344,6 +364,19 @@ div.hud .arrow {
         <a class="selectionBtn tooltip" id="showAll" tooltip="Show all drafted NHL players or only players that have played a game in the 2014/2015 season">SHOW ALL</a>
       </div>
       <div id="resetZoom" class="" >RESET ZOOM</div>
+      <i id="info" class="fa fa-info-circle"></i>
+      <div id="legal" class="hidden">
+        <p>
+          I take no responsibility for the data and its integretity depicted in this graphic.
+
+          All images, including headshots and logos are owned by NHL and usage of such data is not intended to be used for
+          profit or personal gains in anyway. Please be respectful of such copyright and trademarks.
+
+          Credits:
+          All images and player data is from from nhl.com
+          Maps that were generated are from shapefiles in naturalearthdata.com
+        </p>
+      </div>
     </div>
     <svg id="visualization"> </svg>
   </div>
@@ -442,6 +475,14 @@ var APP = function () {
       $("#showAll").click(function () {
         app.showAll = $(this).toggleClass("selected").hasClass("selected");
         app.f.filterActivePlayers();
+      });
+
+
+      $("#info").hover(function () {
+        $("#legal").removeClass("hidden");
+      },
+      function () {
+        $("#legal").addClass("hidden");
       });
 
     },
