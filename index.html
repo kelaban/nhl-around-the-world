@@ -440,9 +440,9 @@ var APP = function () {
       //initialize zoom handling
       svg.call(app.zoom).call(app.zoom.event);
 
-      var $byRegion = $("#byRegion");
-      var $byTeam = $("#byTeam");
-      var $byPlayer = $("#byPlayer");
+      var $byRegion = app.$byRegion = $("#byRegion");
+      var $byTeam = app.$byTeam = $("#byTeam");
+      var $byPlayer = app.$byPlayer = $("#byPlayer");
 
       $(document).keydown(function(event){
         if(event.which=="17" || event.which=="91" || event.which=="93") {
@@ -485,6 +485,8 @@ var APP = function () {
         $("#legal").addClass("hidden");
       });
 
+
+      app.router();
     },
 
 
@@ -676,34 +678,33 @@ var APP = function () {
       clearTimeout($this.data('timer'));
       $this.data('timer', setTimeout(function(){
         $this.removeData('timer');
-        var text = $this.val();
-
-        if(!text) app.f.behaviors.reset();
-
-        var regexp = new RegExp(text, 'i');
-
-        var showAll = app.showAll;
-        _.each(app.players, function(p) {
-
-          var show = ( showAll || p.isActive ) &&
-                      regexp.test(p.searchString)
-
-
-          if(show) {
-            p.$playerCard.removeClass("hidden");
-          } else {
-            p.$playerCard.addClass("hidden")
-          }
-        });
-
+        app.f.updateSearch($this.val());
       }, delay));
     },
 
 
-    updateSearch: function(val, disabled) {
-      if(!disabled) {
-        app.$playerSearch.val(val).trigger("input");
-      }
+    updateSearch: function(text, disabled) {
+      if(disabled) return;
+
+      if(!text) app.f.behaviors.reset();
+
+      var regexp = new RegExp(text, 'i');
+
+      var showAll = app.showAll;
+      _.each(app.players, function(p) {
+
+        var show = ( showAll || p.isActive ) &&
+                    regexp.test(p.searchString)
+
+
+        if(show) {
+          p.$playerCard.removeClass("hidden");
+        } else {
+          p.$playerCard.addClass("hidden")
+        }
+      });
+
+      app.$playerSearch.val(text);
     },
 
 
@@ -760,6 +761,7 @@ var APP = function () {
                  .classed("active", true);
 
         app.f.updateSearch(data.town, disableSearch);
+        app.router.set('region', data.town);
       },
 
       byTeam: function (data, disableSearch) {
@@ -774,7 +776,7 @@ var APP = function () {
 
         app.f.zoomTo(data);
         app.f.updateSearch(team, disableSearch);
-
+        app.router.set('team', team);
       },
 
       byPlayer: function (data, disableSearch) {
@@ -808,6 +810,7 @@ var APP = function () {
 
         app.f.updateSearch(data.name, disableSearch);
 
+        app.router.set('player', data.name);
       }
 
 
@@ -918,6 +921,40 @@ var APP = function () {
       }
     }
   }
+
+
+  app.router = function () {
+    var ROUTE_REGEXP = /\?(team|player|region)=([^&]+)/;
+    var routeParts = window.location.hash.match(ROUTE_REGEXP);
+    if(routeParts && routeParts.length > 2) {
+      var route = routeParts[1];
+      var id = decodeURI(routeParts[2]);
+      app.router[route](id);
+      app.f.updateSearch(id);
+      setTimeout(function () {
+        app.$searchResults.find('.sr:not(.hidden)').first().trigger('click');
+      }, 5000);
+    }
+  }
+
+  app.router.set = function (route, id) {
+    var qs = '?' + route + '=' + encodeURI(id);
+    document.location.hash = '#/' + qs;
+  }
+
+  app.router.team = function (id) {
+    app.$byTeam.trigger('click');
+  };
+
+
+  app.router.player = function (id) {
+    app.$byPlayer.trigger('click');
+  };
+
+
+  app.router.region = function (id) {
+    app.$byRegion.trigger('click');
+  };
 
 
 }
