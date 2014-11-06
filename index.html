@@ -143,27 +143,26 @@ body {
   cursor: pointer;
   color: #a6bddb;
   padding-bottom: 8px;
-  padding-left: 10px;
+  padding-left: 5px;
   margin-left: 5px;
+  margin-right: 5px;
+  position: relative;
+  border-left-width: 5px;
+  border-right-width: 5px;
+  border-right-style: solid;
+  border-left-style: solid;
+  border-color: #000;
 }
 
 .sr.selected {
   color: #F26F61;
-  margin-right: 5px;
-  border-right-width: 5px;
+  border-color: #F26F61 !important;
   border-right-style: solid;
-  border-left-width: 5px;
-  padding-left: 5px;
   border-left-style: solid;
 }
 
 .sr:hover {
-  border-left-width: 5px;
-  padding-left: 5px;
-  border-left-style: solid;
-  border-right-width: 5px;
-  margin-right: 5px;
-  border-right-style: solid;
+  border-color: #a6bddb;
 }
 
 .sr img {
@@ -172,6 +171,17 @@ body {
   float: left;
   padding-top: 8px;
   padding-right: 12px;
+}
+
+img.nhl-shield {
+  position: absolute;
+  width: 20px;
+  height: 25px;
+  top: 0px;
+  right: 8px;
+  padding: 0;
+  margin: 0;
+  z-index: 999;
 }
 
 ul.playerCard {
@@ -1009,6 +1019,9 @@ function makePlayerMap(players) {
                     "sr hidden";
       var $playerCard = $('<div class="'+divCls+'" data-id="'+id+'">' +
             '<img src="' + logo + '"/>' +
+            '<a class="nhl-shield" target="_blank" href="http://www.nhl.com/ice/player.htm?id='+p.id+'">' +
+              '<img class="nhl-shield" src="'+IMAGE_LOCATION + '/logos/nhl-shield.svg" />' +
+            '</a>' +
             '<ul class="playerCard">' +
             '<li>'+ p.name + '</li>' +
             '<li>'+ p.team + '</li>' +
